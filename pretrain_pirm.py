@@ -16,6 +16,9 @@ import os
 import scipy.misc
 import time
 from tqdm import tqdm
+from tensorboardX import SummaryWriter
+import torch.backends.cudnn as cudnn
+
 parser = argparse.ArgumentParser(description='SR benchmark')
 
 # Dataset
@@ -25,14 +28,12 @@ parser.add_argument('--valid-dataset', metavar='T', type=str, default='DIV2K',
                     help='Training dataset')
 parser.add_argument('-s', '--scale', metavar='S', type=int, default=4, 
                     help='interpolation scale. Default 4. Currently, support 4x only')
-parser.add_argument('--num-valids', metavar='N', type=int, default=10,
-                    help='Number of image for validation')
 parser.add_argument('--patch-size', metavar='P', type=int, default=48,
                     help='input patch size')
 
 # Model
 parser.add_argument('-c', '--num-channels', metavar='N', type=int, default = 64)
-parser.add_argument('-d', '--num_blocks', metavar='N', type=int, default = 16)
+parser.add_argument('-d', '--num-blocks', metavar='N', type=int, default = 16)
 parser.add_argument('-r', '--res-scale', metavar='R', type=float, default=1)
 
 # Training 
@@ -58,7 +59,6 @@ print('-------YOUR SETTINGS_________')
 for arg in vars(args):
             print("%15s: %s" %(str(arg), str(getattr(args, arg))))
 print('')
-args.str_scale = 'X' + str(args.scale)
 
 def main(argv=None):
     # ============Dataset===============
@@ -67,22 +67,24 @@ def main(argv=None):
     train_set_path = os.path.join('data/original_data/train', args.train_dataset)
     val_set_path = os.path.join('data/original_data/valid', args.valid_dataset)
 
-    train_set = DIV2K_Dataset(train_set_path, patch_size=args.patch_size, num_repeats=args.num_repeats, 
-                              scale=args.scale, is_aug=True, crop_type='random')
-    val_set = DIV2K_Dataset(val_set_path, patch_size=None, num_repeats=1, scale=args.scale, is_aug=False)
+    train_set = SRDataset(train_set_path, patch_size=args.patch_size, num_repeats=args.num_repeats, 
+                          scale=args.scale, is_aug=True, crop_type='random')
+    val_set = SRDataset(val_set_path, patch_size=None, num_repeats=1, scale=args.scale, 
+                        is_aug=False, fixed_length=20)
     print('Finish loading dataset in %d seconds' %(time.time() - since))
     train_loader = DataLoader(train_set, batch_size=args.batch_size,
-                              shuffle=True, num_workers=4)
+                              shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_set, batch_size=1,
-                            shuffle=False, num_workers=4)
+                            shuffle=False, num_workers=4, pin_memory=True)
 
     #===========Model=====================
     n_GPUs = torch.cuda.device_count()
     print('Loading model using %d GPU(s)...' %n_GPUs)
     opt = {'scale': args.scale, 'num_channels': args.num_channels, 'depth': args.num_blocks, 'res_scale': args.res_scale}
-    model = nn.DataParallebel(Generator_L2H(opt)).cuda()
+    model = nn.DataParallel(Generator(opt)).cuda()
+    cudnn.benchmark = True
         
-    check_point = os.path.join('check_point/pretrain/', '{}_c{}_d{}'.format(args.save, args.num_channels, args.num_blocks))
+    check_point = os.path.join('check_point/pretrain/', '{}/c{}_d{}'.format(args.save, args.num_channels, args.num_blocks))
     clean_and_mk_dir(check_point)
 
     #============optimizer
@@ -94,7 +96,7 @@ def main(argv=None):
     l1_loss_fn = nn.L1Loss()
 
     # ==========Log and book-keeping vars =======
-    tb = SummaryWriter(args.check_point)
+    tb = SummaryWriter(check_point)
     (best_val_psnr, best_epoch) = (-1, -1)
 
     # Training and validating
@@ -138,8 +140,6 @@ def main(argv=None):
         #================Validating============================
         print('Validating...')
         val_psnr = 0
-        num_batches = len(val_set)
-        
         with torch.no_grad():
             for i, (inp, lbl) in enumerate(tqdm(val_loader)):
                 inp, lbl = (Variable(inp.cuda()),
@@ -150,7 +150,7 @@ def main(argv=None):
                 update_tensorboard(epoch, tb, i, inp, out, lbl)
                 val_psnr += compute_PSNR(out, lbl)
 
-            val_psnr = val_psnr/args.num_valids
+            val_psnr = val_psnr/len(val_set)
             print('Validate PSNR: %.4fdB' %val_psnr)
             if val_psnr > best_val_psnr:
                 best_val_psnr = val_psnr

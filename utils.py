@@ -43,8 +43,7 @@ def compute_SSIM(out, lbl):
     out, lbl = Variable(out.cuda()), Variable(lbl.cuda())
     return pytorch_ssim.ssim(out, lbl)
 
-def to_numpy(epoch, tb, img_idx, inp, out, lbl):
-    # update tensorboard and
+def to_numpy(inp, out, lbl):
     inp = inp.squeeze(0).data.cpu().numpy()
     out = out.squeeze(0).data.cpu().numpy()
     lbl = lbl.squeeze(0).data.cpu().numpy()
@@ -56,7 +55,7 @@ def to_numpy(epoch, tb, img_idx, inp, out, lbl):
     lbl = lbl.transpose(1, 2, 0).astype(np.uint8)
     return inp, out, lbl
 
-def update_tensorboard(epoch, tb, img_idx, inp, out, lbl)
+def update_tensorboard(epoch, tb, img_idx, inp, out, lbl):
     if epoch == 0:
         tb.add_image(str(img_idx) + '_LR', inp, epoch)
         tb.add_image(str(img_idx) + '_HR', lbl, epoch)

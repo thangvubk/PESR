@@ -13,6 +13,10 @@ def default_conv(in_channelss, out_channels, kernel_size, bias=True):
     return nn.Conv2d(
         in_channelss, out_channels, kernel_size,
         padding=(kernel_size // 2), bias=bias)
+class Conv(nn.Conv2d):
+    def __init__(self, in_planes, out_planes, kernel_size, stride=1, bias=True):
+        super(Conv, self).__init__(in_planes, out_planes, kernel_size, 
+                padding=(kernel_size//2), stride=stride, bias=bias)
 
 class MeanShift(nn.Conv2d):
     def __init__(self, rgb_range, rgb_mean, rgb_std, sign=-1):
@@ -39,14 +43,14 @@ class BasicBlock(nn.Sequential):
 
 class ResBlock(nn.Module):
     def __init__(
-        self, conv, n_feat, kernel_size,
+        self, n_feats, kernel_size,
         bias=True, bn=False, act=nn.ReLU(True), res_scale=1):
 
         super(ResBlock, self).__init__()
         modules_body = []
         for i in range(2):
-            modules_body.append(conv(n_feat, n_feat, kernel_size, bias=bias))
-            if bn: modules_body.append(nn.BatchNorm2d(n_feat))
+            modules_body.append(Conv(n_feats, n_feats, kernel_size, bias=bias))
+            if bn: modules_body.append(nn.BatchNorm2d(n_feats))
             if i == 0: modules_body.append(act)
 
         self.body = nn.Sequential(*modules_body)
@@ -59,65 +63,22 @@ class ResBlock(nn.Module):
         return res
 
 class Upsampler(nn.Sequential):
-    def __init__(self, conv, scale, n_feat, bn=False, act=False, bias=True):
+    def __init__(self, n_feats):
+        super(Upsampler, self).__init__(Conv(n_feats, 4*n_feats, 3),
+                                        nn.PixelShuffle(2),
+                                        Conv(n_feats, 4*n_feats, 3),
+                                        nn.PixelShuffle(2),
+                                        Conv(n_feats, 3, 3))
 
-        modules = []
-        if (scale & (scale - 1)) == 0:    # Is scale = 2^n?
-            for _ in range(int(math.log(scale, 2))):
-                modules.append(conv(n_feat, 4 * n_feat, 3, bias))
-                modules.append(nn.PixelShuffle(2))
-                if bn: modules.append(nn.BatchNorm2d(n_feat))
-                if act: modules.append(act())
-        elif scale == 3:
-            modules.append(conv(n_feat, 9 * n_feat, 3, bias))
-            modules.append(nn.PixelShuffle(3))
-            if bn: modules.append(nn.BatchNorm2d(n_feat))
-            if act: modules.append(act())
-        else:
-            raise NotImplementedError
 
-        super(Upsampler, self).__init__(*modules)
-
-class Downsampler(nn.Sequential):
-    def __init__(self, n_feat, conv=default_conv):
-        modules = [
-            conv(n_feat, n_feat//4, 3),
-            PixelDeshuffle(2),
-            conv(n_feat, n_feat//4, 3),
-            PixelDeshuffle(2)
-        ]
-        super(Downsampler, self).__init__(*modules)
-
-class PretrainedVGG1(nn.Module):
-    def __init__(self, conv_index, rgb_range=1):
-        super(PretrainedVGG1, self).__init__()
+class VGG(nn.Module):
+    def __init__(self):
+        super(VGG, self).__init__()
         vgg_features = models.vgg19(pretrained=True).features
         modules = [m for m in vgg_features]
-        if conv_index == '22':
-            self.vgg = nn.Sequential(*modules[:8])
-        elif conv_index == '54':
-            self.vgg = nn.Sequential(*modules[:35])
+        self.vgg = nn.Sequential(*modules[:35]) #VGG 5_4
 
-        vgg_mean = (0.485, 0.456, 0.406)
-        vgg_std = (0.229 * rgb_range, 0.224 * rgb_range, 0.225 * rgb_range)
-        self.sub_mean = MeanShift(rgb_range, vgg_mean, vgg_std)
-        self.vgg.requires_grad = False
-
-    def forward(self, x):
-        x = self.sub_mean(x)
-        x = self.vgg(x)
-        return x
-
-class PretrainedVGG(nn.Module):
-    def __init__(self, conv_index, rgb_range=1):
-        super(PretrainedVGG, self).__init__()
-        vgg_features = models.vgg19(pretrained=True).features
-        modules = [m for m in vgg_features]
-        if conv_index == '22':
-            self.vgg = nn.Sequential(*modules[:8])
-        elif conv_index == '54':
-            self.vgg = nn.Sequential(*modules[:35])
-
+        rgb_range = 255
         vgg_mean = (0.485, 0.456, 0.406)
         vgg_std = (0.229 * rgb_range, 0.224 * rgb_range, 0.225 * rgb_range)
         self.sub_mean = MeanShift(rgb_range, vgg_mean, vgg_std)
@@ -133,13 +94,11 @@ class PretrainedVGG(nn.Module):
         with torch.no_grad():
             vgg_hr = _forward(hr.detach())
 
-        #loss = F.mse_loss(vgg_sr, vgg_hr)
-
         return vgg_sr, vgg_hr
 
-class Generator_L2H(nn.Module):
-    def __init__(self, opt, conv=default_conv):
-        super(Generator_L2H, self).__init__()
+class Generator(nn.Module):
+    def __init__(self, opt):
+        super(Generator, self).__init__()
 
         n_resblock = opt['depth']
         n_feats = opt['num_channels']
@@ -150,131 +109,47 @@ class Generator_L2H(nn.Module):
         act = nn.ReLU(True)
         #act = nn.PReLU(n_feats)
 
-        rgb_mean = (0.4488, 0.4371, 0.4040)
+        #rgb_mean = (0.4488, 0.4371, 0.4040) # DIV2K800
+        rgb_mean = (0.4463, 0.4368, 0.4046) # DIV2K900
         rgb_std = (1.0, 1.0, 1.0)
         rgb_range = 255
+
+        modules_body = [ ResBlock(n_feats, kernel_size, act=act, res_scale=res_scale) \
+                          for _ in range(n_resblock)]
+        modules_body.append(Conv(n_feats, n_feats, kernel_size))
+
         self.sub_mean = MeanShift(rgb_range, rgb_mean, rgb_std)
-
-        # define head module
-        modules_head = [conv(3, n_feats, kernel_size)]
-
-        # define body module
-        modules_body = [
-                        ResBlock(
-                        conv, n_feats, kernel_size, act=act, res_scale=res_scale) \
-                        for _ in range(n_resblock)]
-        modules_body.append(conv(n_feats, n_feats, kernel_size))
-
-        # define tail module
-        modules_tail = [
-                        Upsampler(conv, scale, n_feats, act=False),
-                        conv(n_feats, 3, kernel_size)]
-
-        self.add_mean = MeanShift(rgb_range, rgb_mean, rgb_std, 1)
-
-        self.head = nn.Sequential(*modules_head)
+        self.embed = Conv(3, n_feats, kernel_size)
         self.body = nn.Sequential(*modules_body)
-        self.tail = nn.Sequential(*modules_tail)
+        self.upsample = Upsampler(n_feats)
+        self.add_mean = MeanShift(rgb_range, rgb_mean, rgb_std, 1)
 
     def forward(self, x):
         x = self.sub_mean(x)
-        #print(x[0, 0, :, :])
-        x = self.head(x)
 
+        x = self.embed(x)
         res = self.body(x)
         res += x
 
-        x = self.tail(res)
+        x = self.upsample(res)
         x = self.add_mean(x)
 
         return x
 
-    def load_state_dict(self, state_dict, strict=True):
-        own_state = self.state_dict()
-        for name, param in state_dict.items():
-            if name in own_state:
-                if isinstance(param, nn.Parameter):
-                    param = param.data
-                try:
-                    own_state[name].copy_(param)
-                except Exception:
-                    if name.find('tail') == -1:
-                        raise RuntimeError('While copying the parameter named {}, '
-                                            'whose dimensions in the model are {} and '
-                                            'whose dimensions in the checkpoint are {}.'
-                                            .format(name, own_state[name].size(), param.size()))
-            elif strict:
-                if name.find('tail') == -1:
-                    raise KeyError('unexpected key "{}" in state_dict'.format(name))
-
-
-class Generator_H2L(nn.Module):
-    def __init__(self, opt, conv=default_conv):
-        super(Generator_H2L, self).__init__()
-
-        n_resblock = opt['depth']
-        n_feats = opt['num_channels']
-        res_scale = opt['res_scale']
-        kernel_size = 3
-        scale = opt['scale']
-        act = nn.ReLU(True)
-
-        rgb_mean = (0.4488, 0.4371, 0.4040)
-        rgb_std = (1.0, 1.0, 1.0)
-        rgb_range = 255
-        self.sub_mean = MeanShift(rgb_range, rgb_mean, rgb_std) 
-
-        # define head module
-        modules_head = [conv(3, n_feats, kernel_size),
-                        Downsampler(n_feats)]
-
-        # define body module
-        modules_body = [
-                        ResBlock(
-                        conv, n_feats, kernel_size, act=act, res_scale=res_scale) \
-                        for _ in range(n_resblock)]
-        modules_body.append(conv(n_feats, n_feats, kernel_size))
-
-        # define tail module
-        modules_tail = [
-                        conv(n_feats, 3, kernel_size)]
-
-        self.add_mean = MeanShift(rgb_range, rgb_mean, rgb_std, 1)
-
-        self.head = nn.Sequential(*modules_head)
-        self.body = nn.Sequential(*modules_body)
-        self.tail = nn.Sequential(*modules_tail)
-
-    def forward(self, x):
-        x = self.sub_mean(x)
-        x = self.head(x)
-
-        res = self.body(x)
-        res += x
-
-        x = self.tail(res)
-        x = self.add_mean(x)
-
-        return x
-
-
-
-class Discriminator_H(nn.Module):
-    def __init__(self, opt, gan_type='GAN'):
-        super(Discriminator_H, self).__init__()
+class Discriminator(nn.Module):
+    def __init__(self, opt):
+        super(Discriminator, self).__init__()
 
         in_channels = 3
         out_channels = 64
         depth = 7
-        #bn = not gan_type == 'WGAN_GP'
-        bn = True
         act = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
         n_colors = 3
         patch_size = 96
 
         m_features = [
-            BasicBlock(n_colors, out_channels, 3, bn=bn, act=act)
+            BasicBlock(n_colors, out_channels, 3, bn=True, act=act)
         ]
         for i in range(depth):
             in_channels = out_channels
@@ -284,7 +159,7 @@ class Discriminator_H(nn.Module):
             else:
                 stride = 2
             m_features.append(BasicBlock(
-                in_channels, out_channels, 3, stride=stride, bn=bn, act=act
+                in_channels, out_channels, 3, stride=stride, bn=True, act=act
             ))
 
         self.features = nn.Sequential(*m_features)

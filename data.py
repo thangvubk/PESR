@@ -11,7 +11,7 @@ import random
 import utils
 import time
 
-class DIV2K_Dataset(Dataset):
+class SRDataset(Dataset):
     def __init__(self, path, patch_size, scale, num_repeats, is_aug=False, crop_type=None, fixed_length=None):
         self.is_aug = is_aug
         self.crop_type = crop_type

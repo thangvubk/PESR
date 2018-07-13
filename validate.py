@@ -11,6 +11,7 @@ from torch.autograd import Variable
 import pytorch_ssim
 import h5py
 from data import *
+import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 parser = argparse.ArgumentParser(description='SR benchmark')
 parser.add_argument('-m', '--model', metavar='M', type=str, default='VDSR',
@@ -94,6 +95,8 @@ def main():
     model = Generator_L2H(opt).cuda()
     model.load_state_dict(torch.load(check_point))
     model.cuda()
+    cudnn.benchmark = True
+
     for lr_path in lr_paths:
         inp = scipy.misc.imread(lr_path)
         inp = inp.transpose(2, 0, 1)
