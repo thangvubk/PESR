@@ -46,7 +46,7 @@ parser.add_argument('--num-epochs', type=int, default=300,
 parser.add_argument('--num-repeats', type=int, default=20)
 
 # Checkpoint
-parser.add_argument('--save', type=str, default='model')
+parser.add_argument('--save', type=str, default='deep')
 
 
 args = parser.parse_args()
@@ -84,7 +84,7 @@ def main(argv=None):
     model = nn.DataParallel(Generator(opt)).cuda()
     cudnn.benchmark = True
         
-    check_point = os.path.join('check_point/pretrain/', '{}/c{}_d{}'.format(args.save, args.num_channels, args.num_blocks))
+    check_point = os.path.join('check_point/pretrain/', '{}_c{}_b{}'.format(args.save, args.num_channels, args.num_blocks))
     clean_and_mk_dir(check_point)
 
     #============optimizer

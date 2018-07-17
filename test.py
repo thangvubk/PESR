@@ -20,8 +20,6 @@ parser.add_argument('-s', '--scale', metavar='S', type=int, default=4,
 parser.add_argument('-t', '--dataset', metavar='T', type=str, default='PIRM')
 parser.add_argument('-p', '--check_point', metavar='T', type=str, default='best_model')
 parser.add_argument('--save_path', type=str, default='results/PIRM')
-#temp ssim tuning
-parser.add_argument('-a', '--alpha', metavar='A', type=str, default="") 
 parser.add_argument('-c', '--num_channels', metavar='C', type=int, default=64)
 parser.add_argument('-d', '--num_blocks', metavar='N', type=int, default = 16)
 parser.add_argument('-r', '--res_scale', metavar='R', type=float, default=1)

@@ -38,7 +38,7 @@ print('############################################################')
 print('')
 print('-------YOUR SETTINGS_________')
 for arg in vars(args):
-            print("%15s: %s" %(str(arg), str(getattr(args, arg))))
+            print("%20s: %s" %(str(arg), str(getattr(args, arg))))
 print('')
 
 def x8_forward(img, model, precision='single'):

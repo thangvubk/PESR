@@ -32,13 +32,13 @@ parser.add_argument('--valid_dataset', type=str, default='PIRM',
 parser.add_argument('--num_valids', type=int, default=10,
                     help='Number of image for validation')
 # model
-parser.add_argument('--num_channels', type=int, default = 256,
+parser.add_argument('--num_channels', type=int, default=256,
                     help='number of resnet channel')
-parser.add_argument('--num_blocks', type=int, default = 32,
+parser.add_argument('--num_blocks', type=int, default=32,
                     help='number of resnet blocks')
 parser.add_argument('--res_scale', type=float, default=0.1)
-parser.add_argument('--load', type=str, default='',
-                    help='load pretrained model')
+parser.add_argument('--pretrained_model', type=str, default='deep',
+                    help='pretrained model name')
 
 # training
 parser.add_argument('--batch_size', type=int, default=16,
@@ -72,7 +72,7 @@ print('############################################################')
 print('')
 print('-------YOUR SETTINGS_________')
 for arg in vars(args):
-    print("%15s: %s" %(str(arg), str(getattr(args, arg))))
+    print("%20s: %s" %(str(arg), str(getattr(args, arg))))
 print('')
 args.str_scale = 'X' + str(args.scale)
 
@@ -101,8 +101,8 @@ def main(argv=None):
            'depth': args.num_blocks, 
            'res_scale': args.res_scale}
     G = Generator(opt)
-    if args.load != '':
-        model_path = os.path.join('check_point/pretrain/', '{}/c{}_d{}'.format(args.load, args.num_channels, args.num_blocks), 'best_model.pt')
+    if args.pretrained_model != '':
+        model_path = os.path.join('check_point/pretrain', '{}_c{}_b{}'.format(args.pretrained_model, args.num_channels, args.num_blocks), 'best_model.pt')
         print('Loading model', model_path)
         G.load_state_dict(torch.load(model_path))
     G = nn.DataParallel(G).cuda()
