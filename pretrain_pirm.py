@@ -22,28 +22,28 @@ import torch.backends.cudnn as cudnn
 parser = argparse.ArgumentParser(description='SR benchmark')
 
 # Dataset
-parser.add_argument('--train-dataset', metavar='T', type=str, default='DIV2K',
+parser.add_argument('--train-dataset', type=str, default='DIV2K',
                     help='Training dataset')
-parser.add_argument('--valid-dataset', metavar='T', type=str, default='DIV2K',
+parser.add_argument('--valid-dataset', type=str, default='DIV2K',
                     help='Training dataset')
-parser.add_argument('-s', '--scale', metavar='S', type=int, default=4, 
-                    help='interpolation scale. Default 4. Currently, support 4x only')
-parser.add_argument('--patch-size', metavar='P', type=int, default=48,
+parser.add_argument('--scale', type=int, default=4, 
+                    help='Upscale. Default 4. Currently, support 4x only')
+parser.add_argument('--patch-size', type=int, default=48,
                     help='input patch size')
 
 # Model
-parser.add_argument('-c', '--num-channels', metavar='N', type=int, default = 64)
-parser.add_argument('-d', '--num-blocks', metavar='N', type=int, default = 16)
-parser.add_argument('-r', '--res-scale', metavar='R', type=float, default=1)
+parser.add_argument('--num-channels', type=int, default = 256)
+parser.add_argument('--num-blocks', type=int, default = 32)
+parser.add_argument('--res-scale', type=float, default=0.1)
 
 # Training 
-parser.add_argument('-b', '--batch-size', metavar='B', type=int, default=16,
+parser.add_argument('--batch-size', type=int, default=16,
                     help='batch size used for training. Default 16')
-parser.add_argument('-l', '--learning-rate', metavar='L', type=float, default=1e-4,
+parser.add_argument('--learning-rate', type=float, default=1e-4,
                     help='learning rate used for training. Default 1e-4')
-parser.add_argument('-n', '--num-epochs', metavar='N', type=int, default=300,
+parser.add_argument('--num-epochs', type=int, default=300,
                     help='number of training epochs. Default 100')
-parser.add_argument('--num-repeats', metavar='V', type=int, default=20)
+parser.add_argument('--num-repeats', type=int, default=20)
 
 # Checkpoint
 parser.add_argument('--save', type=str, default='model')

@@ -79,9 +79,8 @@ def x8_forward(img, model, precision='single'):
 
 def main():
     val_set_path = os.path.join('data/original_data/test/benchmark', args.dataset)
-    val_set = DIV2K_Dataset(val_set_path, patch_size=None, num_repeats=1, scale=args.scale, is_aug=False)
-    val_loader = DataLoader(val_set, batch_size=1,
-                            shuffle=False, num_workers=8)
+    val_set = SRDataset(val_set_path, patch_size=None, num_repeats=1, scale=args.scale, is_aug=False)
+    val_loader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=8)
     test_path = os.path.join('data/preprocessed_data/test', args.dataset, args.str_scale)
     save_path = args.save_path
     if not os.path.exists(save_path):
@@ -101,15 +100,24 @@ def main():
         raise Exception('Cannot find %s' %check_point)
 
     opt = {'scale': args.scale, 'num_channels': args.num_channels, 'depth': args.num_blocks, 'res_scale': args.res_scale}
-    model = Generator_L2H(opt).cuda()
+    model = Generator(opt).cuda()
     model.load_state_dict(torch.load(check_point))
-    model.cuda()
+
+    # test psnr
+    model_psnr = Generator(opt).cuda()
+    model_psnr.load_state_dict(torch.load('check_point/pretrain/ReLU_DIV2K900_300epoch_256feats/c256_d32/best_model.pt'))
+
     psnrs = []
     ssims = []
     for i, (inp, lbl) in enumerate(val_loader):
         if i == args.num_imgs: break
         inp = Variable(inp.cuda())
         out = model(inp)
+
+        out_psnr = model_psnr(inp)
+        alpha = 0
+        out = alpha*out + (1-alpha)*out_psnr
+
         #out = x8_forward(inp, model) 
         #print(time.time() - since)
         

@@ -29,7 +29,7 @@ class SRDataset(Dataset):
             self.inputs = np.load(np_inputs)
             self.labels = np.load(np_labels)
         else:
-            print('Cannot find numpy file. Reading image...')
+            print('Numpy binary is not created. Reading image...')
             since = time.time()
             hr_path = os.path.join(path, 'HR')
             lr_path = os.path.join(path, 'LR', str_scale)

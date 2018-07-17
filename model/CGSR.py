@@ -5,14 +5,8 @@ import math
 import torch
 import torch.nn.init as init
 import torchvision.models as models
-from model.pixel_deshuffle import *
-#import pytorch_fft.fft.autograd as fft
 from torch.autograd import Variable
 
-def default_conv(in_channelss, out_channels, kernel_size, bias=True):
-    return nn.Conv2d(
-        in_channelss, out_channels, kernel_size,
-        padding=(kernel_size // 2), bias=bias)
 class Conv(nn.Conv2d):
     def __init__(self, in_planes, out_planes, kernel_size, stride=1, bias=True):
         super(Conv, self).__init__(in_planes, out_planes, kernel_size, 
@@ -104,7 +98,6 @@ class Generator(nn.Module):
         n_feats = opt['num_channels']
         res_scale = opt['res_scale']
         kernel_size = 3
-        scale = opt['scale']
         #act = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         act = nn.ReLU(True)
         #act = nn.PReLU(n_feats)
@@ -146,7 +139,7 @@ class Discriminator(nn.Module):
         act = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
         n_colors = 3
-        patch_size = 96
+        patch_size = opt['patch_size']*4
 
         m_features = [
             BasicBlock(n_colors, out_channels, 3, bn=True, act=act)
@@ -177,85 +170,4 @@ class Discriminator(nn.Module):
         output = self.classifier(features.view(features.size(0), -1))
 
         return output
-
-class Discriminator_L(nn.Module):
-    def __init__(self, opt, gan_type='GAN'):
-        super(Discriminator_L, self).__init__()
-
-        in_channels = 3
-        out_channels = 64
-        depth = 7
-        #bn = not gan_type == 'WGAN_GP'
-        bn = True
-        act = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-
-        n_colors = 3
-        patch_size = 24
-
-        m_features = [
-            BasicBlock(n_colors, out_channels, 3, bn=bn, act=act)
-        ]
-        for i in range(depth):
-            in_channels = out_channels
-            if i % 4 != 1:
-                stride = 1
-                out_channels *= 2
-            else:
-                stride = 2
-            m_features.append(BasicBlock(
-                in_channels, out_channels, 3, stride=stride, bn=bn, act=act
-            ))
-
-        self.features = nn.Sequential(*m_features)
-
-        #patch_size = patch_size // (2**((depth + 1) // 2))
-        patch_size = 6
-        m_classifier = [
-            nn.Linear(out_channels * patch_size**2, 1024),
-            act,
-            nn.Linear(1024, 1)
-        ]
-        self.classifier = nn.Sequential(*m_classifier)
-
-    def forward(self, x):
-        features = self.features(x)
-        output = self.classifier(features.view(features.size(0), -1))
-
-        return output
-
-#class FFT(nn.Module):
-#    def __init__(self):
-#        super(FFT, self).__init__()
-#        self.fft = fft.Fft2d()
-#
-#    def forward(self, sr, hr):
-#        def _forward(img):
-#            #fft_re = Variable(torch.empty_like(img))
-#            #fft_im = Variable(torch.empty_like(img))
-#            #img_im = Variable(torch.zeros_like(img))
-#            #for i in range(3):
-#            #    fft_re[:, i, :, :], fft_im[:, i, :, :] = \
-#            #        self.fft(img[:, i, :, :], img_im[:, i, :, :])
-#            #return torch.cat([fft_re, fft_im], 1)
-#            spectrum = Variable(torch.empty_like(img))
-#            img_im = Variable(torch.zeros_like(img))
-#            for i in range(3):
-#                fft_re, fft_im = self.fft(img[:, i, :, :], img_im[:, i, :, :])
-#                spectrum[:, i, :, :] = torch.log(torch.sqrt(fft_re**2 + fft_im**2))
-#            return spectrum
-#
-#
-#        fft_sr = _forward(sr)
-#        fft_hr = _forward(hr)
-#        return fft_sr, fft_hr
-
-        
-
-
-
-
-
-
-
-
 

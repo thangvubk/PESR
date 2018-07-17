@@ -4,7 +4,6 @@ from data import *
 from model import *
 from solver import *
 from utils import *
-import progressbar
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -19,43 +18,51 @@ import time
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 import torch.backends.cudnn as cudnn
+import random
 
 parser = argparse.ArgumentParser(description='SR benchmark')
 
 # dataset
-parser.add_argument('-s', '--scale', metavar='S', type=int, default=4, 
+parser.add_argument('--scale', type=int, default=4, 
                     help='interpolation scale. Default 4')
-parser.add_argument('--train_dataset', metavar='T', type=str, default='DIV2K',
+parser.add_argument('--train_dataset', type=str, default='DIV2K900',
                     help='Training dataset')
-parser.add_argument('--valid_dataset', metavar='T', type=str, default='DIV2K',
+parser.add_argument('--valid_dataset', type=str, default='PIRM',
                     help='Training dataset')
-parser.add_argument('--num_valids', metavar='N', type=int, default=10,
+parser.add_argument('--num_valids', type=int, default=10,
                     help='Number of image for validation')
 # model
-parser.add_argument('-c', '--num_channels', metavar='N', type=int, default = 64)
-parser.add_argument('-d', '--num_blocks', metavar='N', type=int, default = 16)
-parser.add_argument('-r', '--res_scale', metavar='R', type=float, default=1)
+parser.add_argument('--num_channels', type=int, default = 256,
+                    help='number of resnet channel')
+parser.add_argument('--num_blocks', type=int, default = 32,
+                    help='number of resnet blocks')
+parser.add_argument('--res_scale', type=float, default=0.1)
 parser.add_argument('--load', type=str, default='',
                     help='load pretrained model')
 
 # training
-parser.add_argument('-b', '--batch_size', metavar='B', type=int, default=16,
+parser.add_argument('--batch_size', type=int, default=16,
                     help='batch size used for training. Default 16')
-parser.add_argument('-l', '--learning_rate', metavar='L', type=float, default=5e-5,
+parser.add_argument('--learning_rate', type=float, default=5e-5,
                     help='learning rate used for training. Default 1e-4')
-parser.add_argument('-n', '--num_epochs', metavar='N', type=int, default=50,
+parser.add_argument('--num_epochs', type=int, default=200,
                     help='number of training epochs. Default 100')
-parser.add_argument('--num_repeats', metavar='V', type=int, default=20)
-parser.add_argument('--patch_size', metavar='P', type=int, default=24,
+parser.add_argument('--num_repeats', type=int, default=20)
+parser.add_argument('--patch_size', type=int, default=24,
                     help='input patch size')
 
 # checkpoint
 parser.add_argument('--check_point', type=str, default='check_point')
 
-# GAN option
-parser.add_argument('--alpha_vgg', type=float, default=5)
-parser.add_argument('--alpha_gan', type=float, default=0.1)
-parser.add_argument('--gan_type', type=str, default='SGAN')
+# Loss
+parser.add_argument('--alpha_vgg', type=float, default=50)
+parser.add_argument('--alpha_gan', type=float, default=1)
+parser.add_argument('--alpha_tv', type=float, default=1e-6)
+parser.add_argument('--gan_type', type=str, default='RSGAN')
+parser.add_argument('--GP', dest='GP', action='store_true',
+                    help='Gradient penalty for training GAN (Note: default False)')
+parser.add_argument('--fl_gamma', type=float, default=1,
+                    help='Focal loss gamma')
 
 args = parser.parse_args()
 print('############################################################')
@@ -77,7 +84,7 @@ def main(argv=None):
 
     train_set = SRDataset(train_set_path, patch_size=args.patch_size, num_repeats=args.num_repeats, 
                               scale=args.scale, is_aug=True, crop_type='random')
-    val_set = SRDataset(val_set_path, patch_size=200, num_repeats=1, scale=args.scale, is_aug=False, 
+    val_set = SRDataset(val_set_path, patch_size=None, num_repeats=1, scale=args.scale, is_aug=False, 
                             fixed_length=10)
     train_loader = DataLoader(train_set, batch_size=args.batch_size,
                               shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
@@ -88,11 +95,11 @@ def main(argv=None):
     # ============Model================
     n_GPUs = torch.cuda.device_count()
     print('Loading model using %d GPU(s)...' %n_GPUs)
-    opt = {'scale': args.scale, 
+
+    opt = {'patch_size': args.patch_size, 
            'num_channels': args.num_channels, 
            'depth': args.num_blocks, 
            'res_scale': args.res_scale}
-
     G = Generator(opt)
     if args.load != '':
         model_path = os.path.join('check_point/pretrain/', '{}/c{}_d{}'.format(args.load, args.num_channels, args.num_blocks), 'best_model.pt')
@@ -109,22 +116,26 @@ def main(argv=None):
 
     #========== Optimizer============
     trainable = filter(lambda x: x.requires_grad, G.parameters())
-    optim_G = optim.Adam(trainable,
+    optim_G = optim.Adam(trainable, betas=(0.9, 0.999),
                          lr=args.learning_rate)
-    optim_D = optim.Adam(D.parameters(), lr=args.learning_rate)
-    scheduler_G = lr_scheduler.StepLR(optim_G, step_size=30, gamma=0.5)
-    scheduler_D = lr_scheduler.StepLR(optim_D, step_size=30, gamma=0.5)
+    optim_D = optim.Adam(D.parameters(), betas=(0.9, 0.999), lr=args.learning_rate)
+    scheduler_G = lr_scheduler.StepLR(optim_G, step_size=150, gamma=0.5)
+    scheduler_D = lr_scheduler.StepLR(optim_D, step_size=150, gamma=0.5)
     
     # ============Loss==============
     l1_loss_fn = nn.L1Loss()
     bce_loss_fn = nn.BCEWithLogitsLoss()
+    f_loss_fn = FocalLoss(args.fl_gamma)
     def vgg_loss_fn(output, label):
-        vgg_sr, vgg_hr = vgg(output, labels)
+        vgg_sr, vgg_hr = vgg(output, label)
         return F.mse_loss(vgg_sr, vgg_hr)
+    def tv_loss_fn(y):
+        loss_var = torch.sum(torch.abs(y[:, :, :, :-1] - y[:, :, :, 1:])) + \
+                   torch.sum(torch.abs(y[:, :, :-1, :] - y[:, :, 1:, :]))
+        return loss_var
 
-    # ==========Log and book-keeping vars =======
+    # ==========Logging =======
     tb = SummaryWriter(args.check_point)
-    (best_val_error, best_epoch) = (1e6, -1)
 
     # ==========GAN vars======================
     target_real = Variable(torch.Tensor(args.batch_size, 1).fill_(1.0), requires_grad=False).cuda()
@@ -135,19 +146,20 @@ def main(argv=None):
         scheduler_G.step()
         scheduler_D.step()
         cur_lr = optim_G.param_groups[0]['lr']
-        print('Model {}. Epoch {}. Learning rate: {}'.format(
-            args.check_point, epoch, cur_lr))
+        print('Model {}. Epoch [{}/{}]. Learning rate: {}'.format(
+            args.check_point, epoch, args.num_epochs, cur_lr))
         
         num_batches = len(train_set)//args.batch_size
-
-        running_loss = np.zeros(5)
+        running_loss = np.zeros(6)
 
         for i, (inputs, labels) in enumerate(tqdm(train_loader)):
             lr, hr = (Variable(inputs.cuda()),
                       Variable(labels.cuda()))
 
+            #######################################
             # Discriminator
             # hr: real, sr: fake
+            #######################################
             for p in D.parameters():
                 p.requires_grad = True
             optim_D.zero_grad()
@@ -166,10 +178,26 @@ def main(argv=None):
             elif args.gan_type == 'RaLSGAN':
                 total_D_loss = (torch.mean((pred_real - torch.mean(pred_fake) - target_real)**2) + \
                                 torch.mean((pred_fake - torch.mean(pred_real) + target_real)**2))/2
+	    
+            # gradient penalty
+            if args.GP:
+                grad_outputs = torch.ones(args.batch_size, 1).cuda()
+                u = torch.FloatTensor(args.batch_size, 1, 1, 1).cuda()
+                u.uniform_(0, 1)
+                x_both = (hr*u + sr*(1-u)).cuda()
+                x_both = Variable(x_both, requires_grad=True)
+                grad = torch.autograd.grad(outputs=D(x_both), inputs=x_both,
+                                           grad_outputs=grad_outputs, retain_graph=True,
+                                           create_graph=True, only_inputs=True)[0]
+                grad_penalty = 10*((grad.norm(2, 1).norm(2, 1).norm(2, 1) - 1) ** 2).mean()
+                total_D_loss = total_D_loss + grad_penalty
+
             total_D_loss.backward()
             optim_D.step()
 
+            ######################################
             # Generator
+            ######################################
             for p in D.parameters():
                 p.requires_grad = False
             optim_G.zero_grad()
@@ -177,10 +205,12 @@ def main(argv=None):
             pred_real = D(hr)
 
             vgg_loss = vgg_loss_fn(sr, hr)*args.alpha_vgg
+            tv_loss = tv_loss_fn(sr)*args.alpha_tv
+
             if args.gan_type == 'SGAN':
                 G_loss = bce_loss_fn(pred_fake, target_real)
             elif args.gan_type == 'RSGAN':
-                G_loss = bce_loss_fn(pred_fake - pred_real, target_real)
+                G_loss = f_loss_fn(pred_fake - pred_real, target_real) #Focal loss
             elif args.gan_type == 'RaSGAN':
                 G_loss = (bce_loss_fn(pred_real - torch.mean(pred_fake), target_fake) + \
                           bce_loss_fn(pred_fake_H - torch.mean(pred_real_H), target_real))/2
@@ -189,7 +219,7 @@ def main(argv=None):
                           torch.mean((pred_fake - torch.mean(pred_real) - target_real)**2))/2
             G_loss = G_loss*args.alpha_gan
 
-            total_G_loss = vgg_loss + G_loss
+            total_G_loss = vgg_loss + G_loss + tv_loss
 
             total_G_loss.backward()
             optim_G.step()
@@ -197,25 +227,25 @@ def main(argv=None):
             # update log
             running_loss += [vgg_loss.item(), 
                              G_loss.item(), 
+                             tv_loss.item(),
                              total_D_loss.item(),
                              F.sigmoid(pred_real).mean().item(), 
                              F.sigmoid(pred_fake).mean().item()]
 
         avr_loss = running_loss/num_batches
         tb.add_scalar('Learning rate', cur_lr, epoch)
-        tb.add_scalar('Train VGG Loss', avr_loss[0], epoch)
-        tb.add_scalar('Train G Loss', avr_loss[1], epoch)
-        tb.add_scalar('Train D Loss', avr_loss[2], epoch)
-        tb.add_scalar('Train real D output', avr_loss[3], epoch)
-        tb.add_scalar('Train fake D output', avr_loss[4], epoch)
-        tb.add_scalar('Train Total Loss', avr_loss[0:2].sum(), epoch)
+        tb.add_scalar('VGG Loss', avr_loss[0], epoch)
+        tb.add_scalar('G Loss', avr_loss[1], epoch)
+        tb.add_scalar('TV Loss', avr_loss[2], epoch)
+        tb.add_scalar('D Loss', avr_loss[3], epoch)
+        tb.add_scalar('Real D output', avr_loss[4], epoch)
+        tb.add_scalar('Fake D output', avr_loss[5], epoch)
+        tb.add_scalar('Total Loss', avr_loss[0:3].sum(), epoch)
 
-
+        #==========Validate======================
         print('Validating...')
         val_psnr = 0
         num_batches = len(val_set)
-
-        running_loss = np.zeros(3)
 
         with torch.no_grad():
             for i, (inputs, labels) in enumerate(tqdm(val_loader)):
@@ -227,15 +257,13 @@ def main(argv=None):
                 update_tensorboard(epoch, tb, i, lr, sr, hr)
                 val_psnr += compute_PSNR(hr, sr)
 
-
         val_psnr = val_psnr/num_batches
         tb.add_scalar('Validate PSNR', val_psnr, epoch)
-        if True:
-            print('Saving model')
-            model_path = os.path.join(check_point, str(epoch+1)+'.pt')
-            if n_GPUs > 1:
-                torch.save(G.module.state_dict(), model_path)
-            else:
-                torch.save(G.state_dict(), model_path)
+        print('Saving model')
+        model_path = os.path.join(check_point, str(epoch+1)+'.pt')
+        if n_GPUs > 1:
+            torch.save(G.module.state_dict(), model_path)
+        else:
+            torch.save(G.state_dict(), model_path)
 if __name__ == '__main__':
     main()
