@@ -20,7 +20,7 @@ from tensorboardX import SummaryWriter
 import torch.backends.cudnn as cudnn
 import random
 
-parser = argparse.ArgumentParser(description='SR benchmark')
+parser = argparse.ArgumentParser(description='PIRM 2018')
 
 # dataset
 parser.add_argument('--scale', type=int, default=4, 
@@ -38,13 +38,14 @@ parser.add_argument('--num_blocks', type=int, default=32,
                     help='number of resnet blocks')
 parser.add_argument('--res_scale', type=float, default=0.1)
 parser.add_argument('--pretrained_model', type=str, default='deep',
-                    help='pretrained model name')
+                    help='pretrained (l1 loss) model name')
 
 # training
 parser.add_argument('--batch_size', type=int, default=16,
                     help='batch size used for training. Default 16')
 parser.add_argument('--learning_rate', type=float, default=5e-5,
                     help='learning rate used for training. Default 1e-4')
+parser.add_argument('--lr_step', type=int, default=150)
 parser.add_argument('--num_epochs', type=int, default=200,
                     help='number of training epochs. Default 100')
 parser.add_argument('--num_repeats', type=int, default=20)
@@ -54,15 +55,21 @@ parser.add_argument('--patch_size', type=int, default=24,
 # checkpoint
 parser.add_argument('--check_point', type=str, default='check_point')
 
-# Loss
+# GAN
+parser.add_argument('--focal_loss', type=lambda x: (str(x).lower() == 'true'), default=True)
+parser.add_argument('--fl_gamma', type=float, default=1,
+                    help='Focal loss gamma')
 parser.add_argument('--alpha_vgg', type=float, default=50)
 parser.add_argument('--alpha_gan', type=float, default=1)
 parser.add_argument('--alpha_tv', type=float, default=1e-6)
+parser.add_argument('--alpha_l1', type=float, default=0)
+
 parser.add_argument('--gan_type', type=str, default='RSGAN')
-parser.add_argument('--GP', dest='GP', action='store_true',
+parser.add_argument('--GP', type=lambda x: (str(x).lower() == 'true'), default=False,
                     help='Gradient penalty for training GAN (Note: default False)')
-parser.add_argument('--fl_gamma', type=float, default=1,
-                    help='Focal loss gamma')
+parser.add_argument('--spectral_norm', type=lambda x: (str(x).lower() == 'true'), default=False,
+                    help='Discriminator Spectral norm')
+
 
 args = parser.parse_args()
 print('############################################################')
@@ -99,7 +106,8 @@ def main(argv=None):
     opt = {'patch_size': args.patch_size, 
            'num_channels': args.num_channels, 
            'depth': args.num_blocks, 
-           'res_scale': args.res_scale}
+           'res_scale': args.res_scale,
+           'spectral_norm': args.spectral_norm}
     G = Generator(opt)
     if args.pretrained_model != '':
         model_path = os.path.join('check_point/pretrain', '{}_c{}_b{}'.format(args.pretrained_model, args.num_channels, args.num_blocks), 'best_model.pt')
@@ -119,8 +127,8 @@ def main(argv=None):
     optim_G = optim.Adam(trainable, betas=(0.9, 0.999),
                          lr=args.learning_rate)
     optim_D = optim.Adam(D.parameters(), betas=(0.9, 0.999), lr=args.learning_rate)
-    scheduler_G = lr_scheduler.StepLR(optim_G, step_size=150, gamma=0.5)
-    scheduler_D = lr_scheduler.StepLR(optim_D, step_size=150, gamma=0.5)
+    scheduler_G = lr_scheduler.StepLR(optim_G, step_size=args.lr_step, gamma=0.5)
+    scheduler_D = lr_scheduler.StepLR(optim_D, step_size=args.lr_step, gamma=0.5)
     
     # ============Loss==============
     l1_loss_fn = nn.L1Loss()
@@ -150,7 +158,7 @@ def main(argv=None):
             args.check_point, epoch, args.num_epochs, cur_lr))
         
         num_batches = len(train_set)//args.batch_size
-        running_loss = np.zeros(6)
+        running_loss = np.zeros(7)
 
         for i, (inputs, labels) in enumerate(tqdm(train_loader)):
             lr, hr = (Variable(inputs.cuda()),
@@ -204,28 +212,36 @@ def main(argv=None):
             pred_fake = D(sr)
             pred_real = D(hr)
 
+            l1_loss = l1_loss_fn(sr, hr)*args.alpha_l1
             vgg_loss = vgg_loss_fn(sr, hr)*args.alpha_vgg
             tv_loss = tv_loss_fn(sr)*args.alpha_tv
 
             if args.gan_type == 'SGAN':
-                G_loss = bce_loss_fn(pred_fake, target_real)
+                if args.focal_loss:
+                    G_loss = f_loss_fn(pred_fake, target_real)
+                else:
+                    G_loss = bce_loss_fn(pred_fake, target_real)
             elif args.gan_type == 'RSGAN':
-                G_loss = f_loss_fn(pred_fake - pred_real, target_real) #Focal loss
-            elif args.gan_type == 'RaSGAN':
-                G_loss = (bce_loss_fn(pred_real - torch.mean(pred_fake), target_fake) + \
-                          bce_loss_fn(pred_fake_H - torch.mean(pred_real_H), target_real))/2
-            elif args.gan_type == 'RaLSGAN':
-                G_loss = (torch.mean((pred_real - torch.mean(pred_fake) + target_real)**2) + \
-                          torch.mean((pred_fake - torch.mean(pred_real) - target_real)**2))/2
+                if args.focal_loss:
+                    G_loss = f_loss_fn(pred_fake - pred_real, target_real) #Focal loss
+                else:
+                    G_loss = bce_loss_fn(pred_fake - pred_real, target_real)
+            #elif args.gan_type == 'RaSGAN':
+            #    G_loss = (bce_loss_fn(pred_real - torch.mean(pred_fake), target_fake) + \
+            #              bce_loss_fn(pred_fake_H - torch.mean(pred_real_H), target_real))/2
+            #elif args.gan_type == 'RaLSGAN':
+            #    G_loss = (torch.mean((pred_real - torch.mean(pred_fake) + target_real)**2) + \
+            #              torch.mean((pred_fake - torch.mean(pred_real) - target_real)**2))/2
             G_loss = G_loss*args.alpha_gan
 
-            total_G_loss = vgg_loss + G_loss + tv_loss
+            total_G_loss = l1_loss + vgg_loss + G_loss + tv_loss
 
             total_G_loss.backward()
             optim_G.step()
 
             # update log
-            running_loss += [vgg_loss.item(), 
+            running_loss += [l1_loss.item(),
+                             vgg_loss.item(), 
                              G_loss.item(), 
                              tv_loss.item(),
                              total_D_loss.item(),
@@ -234,13 +250,14 @@ def main(argv=None):
 
         avr_loss = running_loss/num_batches
         tb.add_scalar('Learning rate', cur_lr, epoch)
-        tb.add_scalar('VGG Loss', avr_loss[0], epoch)
-        tb.add_scalar('G Loss', avr_loss[1], epoch)
-        tb.add_scalar('TV Loss', avr_loss[2], epoch)
-        tb.add_scalar('D Loss', avr_loss[3], epoch)
-        tb.add_scalar('Real D output', avr_loss[4], epoch)
-        tb.add_scalar('Fake D output', avr_loss[5], epoch)
-        tb.add_scalar('Total Loss', avr_loss[0:3].sum(), epoch)
+        tb.add_scalar('L1 Loss', avr_loss[0], epoch)
+        tb.add_scalar('VGG Loss', avr_loss[1], epoch)
+        tb.add_scalar('G Loss', avr_loss[2], epoch)
+        tb.add_scalar('TV Loss', avr_loss[3], epoch)
+        tb.add_scalar('D Loss', avr_loss[4], epoch)
+        tb.add_scalar('Real D output', avr_loss[5], epoch)
+        tb.add_scalar('Fake D output', avr_loss[6], epoch)
+        tb.add_scalar('Total Loss', avr_loss[0:4].sum(), epoch)
 
         #==========Validate======================
         print('Validating...')
