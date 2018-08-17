@@ -6,6 +6,7 @@ import torch
 import torch.nn.init as init
 import torchvision.models as models
 from torch.autograd import Variable
+#import torch.nn.utils.spectral_norm as spectral_norm
 
 class Conv(nn.Conv2d):
     def __init__(self, in_planes, out_planes, kernel_size, stride=1, bias=True):
@@ -25,12 +26,13 @@ class MeanShift(nn.Conv2d):
 class BasicBlock(nn.Sequential):
     def __init__(
         self, in_channels, out_channels, kernel_size, stride=1, bias=False,
-        bn=True, act=nn.ReLU(True)):
+        bn=True, act=nn.ReLU(True), sn=True):
 
-        m = [nn.Conv2d(
-            in_channels, out_channels, kernel_size,
-            padding=(kernel_size//2), stride=stride, bias=bias)
-        ]
+        #conv = Conv(in_channels, out_channels, kernel_size, stride, bias)
+        if sn: conv = spectral_norm(Conv(in_channels, out_channels, kernel_size, stride, bias))
+        else: conv = Conv(in_channels, out_channels, kernel_size, stride, bias)
+        m = [conv]
+
         if bn: m.append(nn.BatchNorm2d(out_channels))
         if act is not None: m.append(act)
         super(BasicBlock, self).__init__(*m)
@@ -140,9 +142,10 @@ class Discriminator(nn.Module):
 
         n_colors = 3
         patch_size = opt['patch_size']*4
+        sn = opt['spectral_norm']
 
         m_features = [
-            BasicBlock(n_colors, out_channels, 3, bn=True, act=act)
+            BasicBlock(n_colors, out_channels, 3, bn=True, act=act, sn=sn)
         ]
         for i in range(depth):
             in_channels = out_channels
@@ -152,7 +155,7 @@ class Discriminator(nn.Module):
             else:
                 stride = 2
             m_features.append(BasicBlock(
-                in_channels, out_channels, 3, stride=stride, bn=True, act=act
+                in_channels, out_channels, 3, stride=stride, bn=True, act=act, sn=sn
             ))
 
         self.features = nn.Sequential(*m_features)
