@@ -12,18 +12,19 @@ import utils
 import time
 
 class SRDataset(Dataset):
-    def __init__(self, path, patch_size, scale, num_repeats, is_aug=False, crop_type=None, fixed_length=None):
+    def __init__(self, dataset, dset_type, patch_size, num_repeats, is_aug=False, crop_type=None, fixed_length=None):
+        origin_path = os.path.join('data/origin/', dset_type, dataset)
+        bin_path    = os.path.join('data/bin/', dset_type, dataset)
+        self.scale = 4
         self.is_aug = is_aug
         self.crop_type = crop_type
-        self.scale = scale
-        str_scale = 'X' + str(scale)
         self.patch_size = patch_size
         self.num_repeats = num_repeats
         self.fixed_length = fixed_length
         random.seed(1)
 
-        np_inputs = os.path.join(path, str_scale + '_inputs.npy')
-        np_labels = os.path.join(path, 'labels.npy')
+        np_inputs = os.path.join(bin_path, 'inputs.npy')
+        np_labels = os.path.join(bin_path, 'labels.npy')
 
         if os.path.exists(np_inputs) and os.path.exists(np_labels):
             self.inputs = np.load(np_inputs)
@@ -31,10 +32,12 @@ class SRDataset(Dataset):
         else:
             print('Numpy binary is not created. Reading image...')
             since = time.time()
-            hr_path = os.path.join(path, 'HR')
-            lr_path = os.path.join(path, 'LR', str_scale)
+            hr_path = os.path.join(origin_path, 'HR')
+            lr_path = os.path.join(origin_path, 'LR')
             hr_globs = glob.glob(os.path.join(hr_path, '*.png'))
             lr_globs = glob.glob(os.path.join(lr_path, '*.png'))
+            if len(hr_globs) == 0:
+                raise Exception('No images found')
             hr_globs.sort()
             lr_globs.sort()
             self.inputs = [scipy.misc.imread(inp) for inp in lr_globs]
@@ -43,8 +46,11 @@ class SRDataset(Dataset):
 
             print('Writing data to npy...')
             since = time.time()
-            np.save(os.path.join(path, str_scale + '_inputs.npy'), self.inputs)
-            np.save(os.path.join(path, 'labels.npy'), self.labels)
+            if not os.path.exists(bin_path):
+                os.makedirs(bin_path)
+
+            np.save(os.path.join(bin_path, 'inputs.npy'), self.inputs)
+            np.save(os.path.join(bin_path, 'labels.npy'), self.labels)
             print('Complete writing in %f seconds' %(time.time() - since))
        
         # simple test
