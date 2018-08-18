@@ -45,7 +45,7 @@ parser.add_argument('--batch_size', type=int, default=16,
                     help='batch size used for training')
 parser.add_argument('--learning_rate', type=float, default=5e-5,
                     help='learning rate used for training (use 1e-4 for pretrain)')
-parser.add_argument('--lr_step', type=int, default=150,
+parser.add_argument('--lr_step', type=int, default=120,
                     help='steps to decay learning rate')
 parser.add_argument('--num_epochs', type=int, default=200,
                     help='number of training epochs')
@@ -89,18 +89,14 @@ print('')
 def main(argv=None):
     # ============Dataset===============
     print('Loading dataset...')
-    train_set_path = os.path.join('data/original_data/train', args.train_dataset)
-    val_set_path = os.path.join('data/original_data/valid', args.valid_dataset)
-
-    train_set = SRDataset(train_set_path, patch_size=args.patch_size, num_repeats=args.num_repeats, 
-                              scale=args.scale, is_aug=True, crop_type='random')
-    val_set = SRDataset(val_set_path, patch_size=None, num_repeats=1, scale=args.scale, is_aug=False, 
-                            fixed_length=10)
+    train_set = SRDataset(args.train_dataset, 'train', patch_size=args.patch_size, 
+                          num_repeats=args.num_repeats, is_aug=True, crop_type='random')
+    val_set = SRDataset(args.valid_dataset, 'valid', patch_size=None, num_repeats=1, 
+                        is_aug=False, fixed_length=10)
     train_loader = DataLoader(train_set, batch_size=args.batch_size,
                               shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
     val_loader = DataLoader(val_set, batch_size=1,
                             shuffle=False, num_workers=4, pin_memory=True)
-    
 
     # ============Model================
     n_GPUs = torch.cuda.device_count()
@@ -292,7 +288,7 @@ def main(argv=None):
                           Variable(labels.cuda()))
 
                 sr = G(lr)
-                lr, sr, hr = to_numpy(lr, sr, hr)
+                [lr, sr, hr] = tensors_to_imgs([lr, sr, hr])
                 update_tensorboard(epoch, tb, i, lr, sr, hr)
                 val_psnr += compute_PSNR(hr, sr)
 
