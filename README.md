@@ -2,7 +2,7 @@
 Official implementation for Perception-Enhanced Single Image Super-Resolution via Relativistic Generative Networks
 
 ## Dependencies
-- Nvidia GPUs (4 GPUs for training or 1GPUs testing)
+- Nvidia GPUs (4 GPUs for training or 1 GPUs testing)
 - At least 32G RAM 
 - ``Python3``
 - ``Pytorch 0.4``
