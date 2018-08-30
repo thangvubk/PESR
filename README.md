@@ -26,11 +26,12 @@ Official implementation for Perception-Enhanced Single Image Super-Resolution vi
 
 ## Quick start
 - Download test dataset and put into ``data/origin/`` directory
+- Download pretrained model and put into ``check_point`` directory
 - Run ``python test.py --dataset <DATASET_NAME>``
 - Results will be saved into ``results/`` directory
 
 ## Training
-- Download train dataset and put into ``data/origin directory``
+- Download train+val+test dataset and put into ``data/origin directory``
 - Pretrain with L1 loss: ``python train.py --phase pretrain --learning_rate 1e-4``
 - Finetune on pretrained model with GAN: ``python train.py``
 - Models with be saved into ``check_point/`` direcory
