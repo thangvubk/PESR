@@ -56,4 +56,4 @@ Official implementation for Perception-Enhanced Single Image Super-Resolution vi
 
 ## References
 [EDSR-pytorch](https://github.com/thstkdgus35/EDSR-PyTorch)
-
+[Relativistic-GAN](https://github.com/AlexiaJM/RelativisticGAN)
