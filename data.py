@@ -1,15 +1,14 @@
 from __future__ import division
 import torch
 import os
-import h5py
 import glob
 import math
 import numpy as np
 from torch.utils.data import Dataset
-import scipy.misc
 import random
 import utils
 import time
+import imageio
 
 class SRDataset(Dataset):
     def __init__(self, dataset, dset_type, patch_size, num_repeats, is_aug=False, crop_type=None, fixed_length=None):
@@ -30,7 +29,7 @@ class SRDataset(Dataset):
             self.inputs = np.load(np_inputs)
             self.labels = np.load(np_labels)
         else:
-            print('Numpy binary is not created. Reading image...')
+            print('Numpy binary for {} dataset is not created. Reading image...'.format(dset_type))
             since = time.time()
             hr_path = os.path.join(origin_path, 'HR')
             lr_path = os.path.join(origin_path, 'LR')
@@ -40,8 +39,8 @@ class SRDataset(Dataset):
                 raise Exception('No images found')
             hr_globs.sort()
             lr_globs.sort()
-            self.inputs = [scipy.misc.imread(inp) for inp in lr_globs]
-            self.labels = [scipy.misc.imread(lbl) for lbl in hr_globs]
+            self.inputs = [imageio.imread(inp) for inp in lr_globs]
+            self.labels = [imageio.imread(lbl) for lbl in hr_globs]
             print('Complete reading images in %f seconds' %(time.time() - since))
 
             print('Writing data to npy...')
@@ -56,6 +55,7 @@ class SRDataset(Dataset):
         # simple test
         #self.inputs = self.inputs[0:1024]
         #self.labels = self.labels[0:1024]
+
     def __len__(self):
         if self.fixed_length is not None:
             return self.fixed_length
@@ -64,10 +64,8 @@ class SRDataset(Dataset):
     def __getitem__(self, idx):
         idx = idx % len(self.inputs)
 
-        inp = self.inputs[idx]#.astype(np.float32).copy()
-        lbl = self.labels[idx]#.astype(np.float32).copy()
-
-        #inp, lbl = self._normalize(inp, lbl)
+        inp = self.inputs[idx]
+        lbl = self.labels[idx]
 
         if self.crop_type is not None:
             inp, lbl = self._crop(inp, lbl, self.crop_type)

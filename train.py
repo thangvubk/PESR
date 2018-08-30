@@ -55,7 +55,7 @@ parser.add_argument('--patch_size', type=int, default=24,
                     help='input patch size')
 
 # checkpoint
-parser.add_argument('--check_point', type=str, default='check_point',
+parser.add_argument('--check_point', type=str, default='check_point/my_model',
                     help='path to save log and model')
 parser.add_argument('--snapshot_every', type=int, default=10, 
                     help='snapshot freq, used for train model only')
@@ -100,7 +100,7 @@ def main(argv=None):
 
     # ============Model================
     n_GPUs = torch.cuda.device_count()
-    print('Using %d GPU(s)' %n_GPUs)
+    print('Loading model using %d GPU(s)' %n_GPUs)
 
     opt = {'patch_size': args.patch_size, 
            'num_channels': args.num_channels, 
@@ -109,7 +109,7 @@ def main(argv=None):
            'spectral_norm': args.spectral_norm}
     G = Generator(opt)
     if args.pretrained_model != '':
-        print('Loading model', args.pretrained_model)
+        print('Fetching pretrained model', args.pretrained_model)
         G.load_state_dict(torch.load(args.pretrained_model))
     G = nn.DataParallel(G).cuda()
 
@@ -288,8 +288,7 @@ def main(argv=None):
                           Variable(labels.cuda()))
 
                 sr = G(lr)
-                [lr, sr, hr] = tensors_to_imgs([lr, sr, hr])
-                update_tensorboard(epoch, tb, i, lr, sr, hr)
+                update_tensorboard(epoch, tb, i, lr/255, sr/255, hr/255)
                 val_psnr += compute_PSNR(hr, sr)
 
         val_psnr = val_psnr/num_batches

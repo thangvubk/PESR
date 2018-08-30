@@ -1,5 +1,4 @@
 from __future__ import division
-import scipy.misc
 import glob
 import numpy as np
 from model import *
@@ -14,13 +13,13 @@ from functools import reduce
 parser = argparse.ArgumentParser(description='SR benchmark')
 
 #dataset
-parser.add_argument('--dataset', type=str, default='PIRM',
+parser.add_argument('--dataset', type=str, default='Set5',
                     help='test dataset')
 
 # Model
-parser.add_argument('--perceptual_model', type=str, default='check_point',
+parser.add_argument('--perceptual_model', type=str, default='check_point/PESR/train/PERC_model.pt',
                     help='perceptual model name')
-parser.add_argument('--psnr_model', type=str, default='deep',
+parser.add_argument('--psnr_model', type=str, default='check_point/PESR/pretrain/PSNR_model.pt',
                     help='pretrained (l1 loss) model name')
 parser.add_argument('--num_channels', type=int, default=256)
 parser.add_argument('--num_blocks', type=int, default=32)
@@ -80,16 +79,17 @@ def main():
     lr_paths = glob.glob(os.path.join(path, '*.png'))
 
     #=============Model===================
+    print('Loading model...')
     opt = {'num_channels': args.num_channels, 
            'depth': args.num_blocks, 
            'res_scale': args.res_scale}
     model = Generator(opt).cuda()
     model.load_state_dict(torch.load(args.perceptual_model))
-    print("Number of parameters: ", sum([param.nelement() for param in model.parameters()]))
+    print("Number of parameters:", sum([param.nelement() for param in model.parameters()]))
     
     if args.alpha != 1:
         model_psnr = Generator(opt).cuda()
-        model_psnr.load_state_dict(torch.load(psnr_model))
+        model_psnr.load_state_dict(torch.load(args.psnr_model))
 
     cudnn.benchmark = True
 
@@ -97,9 +97,10 @@ def main():
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
+    print('Start testing')
     with torch.no_grad():
         for i, lr_path in enumerate(lr_paths):
-            inp = scipy.misc.imread(lr_path)
+            inp = imageio.imread(lr_path)
             [inp] = imgs_to_tensors([inp])
 
             out = model(inp)
@@ -110,7 +111,7 @@ def main():
             print('Tested %d img(s)' %(i+1))
             [out] = tensors_to_imgs([out])
 
-            scipy.misc.imsave(os.path.join(save_path, os.path.basename(lr_path)), out)
+            imageio.imwrite(os.path.join(save_path, os.path.basename(lr_path)), out)
 
         print('Finish') 
 

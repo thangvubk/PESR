@@ -9,14 +9,6 @@ from torch.autograd import Variable
 def rgb2y(rgb):
     return np.dot(rgb[...,:3], [65.738/256, 129.057/256, 25.064/256]) + 16
 
-def compute_PSNR(out, lbl):
-    out = rgb2y(out)
-    lbl = rgb2y(lbl)
-    diff = out - lbl
-    rmse = np.sqrt(np.mean(diff**2))
-    psnr = 20*np.log10(255/rmse)
-    return psnr
-
 def tensors_to_imgs(x):
     for i in range(len(x)):
         x[i] = x[i].squeeze(0).data.cpu().numpy()
@@ -30,6 +22,15 @@ def imgs_to_tensors(x):
         x[i] = np.expand_dims(x[i], axis=0)
         x[i] = Variable(torch.Tensor(x[i].astype(float)).cuda())
     return x
+
+def compute_PSNR(out, lbl):
+    [out, lbl] = tensors_to_imgs([out, lbl])
+    out = rgb2y(out)
+    lbl = rgb2y(lbl)
+    diff = out - lbl
+    rmse = np.sqrt(np.mean(diff**2))
+    psnr = 20*np.log10(255/rmse)
+    return psnr
 
 def update_tensorboard(epoch, tb, img_idx, inp, out, lbl):
     if epoch == 1:
