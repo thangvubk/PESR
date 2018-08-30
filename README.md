@@ -47,7 +47,13 @@ Official implementation for Perception-Enhanced Single Image Super-Resolution vi
 - Interpolate between perceptual model and PSNR model: ``python test.py --dataset <DATASET> --alpha <ALPHA>``  (with alpha being perceptual weight)
 - Test perceptual quality: refer to [PIRM validation code](https://github.com/roimehrez/PIRM2018)
 
-## References
+## Quantitative and Qualitative results
+<p> RED and BLUE indicate best and second best respectively.</p>
+<p align="center">
+    <img src="https://github.com/thangvubk/PESR/blob/master/docs/quantitative.PNG">
+    <img width="800" height="1200", src="https://github.com/thangvubk/PESR/blob/master/docs/qualitative.PNG">
+</p>
 
+## References
 [EDSR-pytorch](https://github.com/thstkdgus35/EDSR-PyTorch)
 
