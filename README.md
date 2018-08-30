@@ -15,14 +15,14 @@ Official implementation for Perception-Enhanced Single Image Super-Resolution vi
 - Train: DIV2K (800 2K-resolution images)
 - Valid (for visualization): DIV2K (100 val images), PIRM (100 self-val images)
 - Test: Set5, Set14, B100, Urban100, PIRM (100 self-val images), DIV2K (100 val images)
-- Download [train+val+test]() datasets
+- Download [train+val+test](https://drive.google.com/file/d/1rfwHaRIFIJOz_7ZirtAvf6vGTEmLVztC/view?usp=sharing) datasets
 - Download [test only](https://drive.google.com/file/d/1zK9xo-rODnH5s6YlNKLvk4wP7-BZRuGc/view?usp=sharing) dataset
     
 ### Pretrained models
-- Download [pretrained models]() including 1 PSNR-optimized model and 1 perception-optimized model
+- Download [pretrained models](https://drive.google.com/file/d/1_jHPRvwfMzX6tPBQSSzzRwoEUJ7cXxww/view?usp=sharing) including 1 PSNR-optimized model and 1 perception-optimized model
     
 ### Paper results
-- Download [paper results]() in images of the test datasets
+- Download [paper results](https://drive.google.com/file/d/1CULdlaFoSE7HjaKz3cMuCYF3arZH0tuS/view?usp=sharing) in images of the test datasets
 
 ## Quick start
 - Download test dataset and put into ``data/origin/`` directory
@@ -34,7 +34,9 @@ Official implementation for Perception-Enhanced Single Image Super-Resolution vi
 - Pretrain with L1 loss: ``python train.py --phase pretrain --learning_rate 1e-4``
 - Finetune on pretrained model with GAN: ``python train.py``
 - Models with be saved into ``check_point/`` direcory
-- Observe tensorboard: Open another terminal window then ``tensorboard --logdir check_point``
+
+## Visualization
+- Start tensorboard: ``tensorboard --logdir check_point``
 - Enter: ``YOUR_IP:6006`` to your web browser.
 - Tensorboard when finetuning on pretrained model should be similar to:
 
@@ -55,5 +57,5 @@ Official implementation for Perception-Enhanced Single Image Super-Resolution vi
 </p>
 
 ## References
-[EDSR-pytorch](https://github.com/thstkdgus35/EDSR-PyTorch)
-[Relativistic-GAN](https://github.com/AlexiaJM/RelativisticGAN)
+- [EDSR-pytorch](https://github.com/thstkdgus35/EDSR-PyTorch)
+- [Relativistic-GAN](https://github.com/AlexiaJM/RelativisticGAN)
