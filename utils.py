@@ -33,6 +33,8 @@ def compute_PSNR(out, lbl):
     [out, lbl] = tensors_to_imgs([out, lbl])
     out = rgb2y(out)
     lbl = rgb2y(lbl)
+    out = out.clip(0, 255).round()
+    lbl = lbl.clip(0, 255).round()
     diff = out - lbl
     rmse = np.sqrt(np.mean(diff**2))
     psnr = 20*np.log10(255/rmse)
