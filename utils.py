@@ -5,6 +5,7 @@ import os
 import shutil
 import numpy as np
 from torch.autograd import Variable
+import pdb
 
 def rgb2y(rgb):
     return np.dot(rgb[...,:3], [65.738/256, 129.057/256, 25.064/256]) + 16
@@ -23,6 +24,11 @@ def imgs_to_tensors(x):
         x[i] = Variable(torch.Tensor(x[i].astype(float)).cuda())
     return x
 
+def normalize(x):
+    for i in range(len(x)):
+        x[i] = x[i].clamp(0, 255)/255
+    return x 
+
 def compute_PSNR(out, lbl):
     [out, lbl] = tensors_to_imgs([out, lbl])
     out = rgb2y(out)
@@ -32,7 +38,9 @@ def compute_PSNR(out, lbl):
     psnr = 20*np.log10(255/rmse)
     return psnr
 
+
 def update_tensorboard(epoch, tb, img_idx, inp, out, lbl):
+    [inp, out, lbl] = normalize([inp, out, lbl])
     if epoch == 1:
         tb.add_image(str(img_idx) + '_LR', inp, epoch)
         tb.add_image(str(img_idx) + '_HR', lbl, epoch)

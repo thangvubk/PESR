@@ -288,7 +288,7 @@ def main(argv=None):
                           Variable(labels.cuda()))
 
                 sr = G(lr)
-                update_tensorboard(epoch, tb, i, lr/255, sr/255, hr/255)
+                update_tensorboard(epoch, tb, i, lr, sr, hr)
                 val_psnr += compute_PSNR(hr, sr)
 
         val_psnr = val_psnr/num_batches
