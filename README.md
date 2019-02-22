@@ -1,6 +1,20 @@
 # PESR
-Official implementation for Perception-Enhanced Single Image Super-Resolution via Relativistic Generative Networks
+Official implementation for [Perception-Enhanced Single Image Super-Resolution via Relativistic Generative Networks](http://openaccess.thecvf.com/content_ECCVW_2018/papers/11133/Vu_Perception-Enhanced_Image_Super-Resolution_via_Relativistic_Generative_Adversarial_Networks_ECCVW_2018_paper.pdf) ECCV Workshop 2018
+
+## Citation
+Please our project if it is helpful for your research
+```
+@InProceedings{Vu_2018_ECCV_Workshops},
+author = {Vu, Thang and Luu, Tung M. and Yoo, Chang D.},
+title = {Perception-Enhanced Image Super-Resolution via Relativistic Generative Adversarial Networks},
+booktitle = {The European Conference on Computer Vision (ECCV) Workshops},
+month = {September},
+year = {2018}
+}
+```
+
 ![PSNR vs PESR](https://github.com/thangvubk/PESR/blob/master/docs/PSNR_PESR.PNG)
+
 ## Dependencies
 - Nvidia GPUs (training takes 1 day on 4 Titan Xp GPUs)
 - At least 16G RAM 
